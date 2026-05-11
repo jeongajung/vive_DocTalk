@@ -54,4 +54,4 @@ doctalk/
 - **아카이브**: `knowledge/_archive/` 폴더, RAG에서 제외
 
 ## 현재 버전
-v4.1 — 단일 에이전트, Knowledge 핀/아카이브, 4개 키 round-robin
+v4.2 — Agentic 스킬 라우팅, 프로젝트별 스킬 ON/OFF, Knowledge 핀/아카이브

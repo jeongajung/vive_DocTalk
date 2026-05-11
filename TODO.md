@@ -5,7 +5,7 @@
 
 ---
 
-## 현재 상태 (v4.0)
+## 현재 상태 (v4.2)
 
 **스택:** FastAPI + ChromaDB + Gemini(`gemini-3-flash-preview`) / React 18 + Vite + TypeScript  
 **실행:** `backend/` → `uv run uvicorn main:app --reload --port 8000` / `frontend/` → `npm run dev`  
@@ -15,15 +15,21 @@
 
 ## 진행 예정
 
-- [ ] 컨플루언스 문서 v4 → v5 업데이트 (핀 기능 + 컨텍스트 생성 반영)
+- [ ] 컨플루언스 문서 업데이트 (v4.2 변경사항 반영)
 
 ---
 
 ## 완료 (아카이브)
 
+### v4.2 — 2026-05-11
+- [x] Agentic 스킬 라우팅 — LLM이 스킬 필요 여부 직접 판단 (일반 질문은 스킬 없이 LLM으로 답변)
+- [x] 프로젝트별 스킬 ON/OFF — ProjectDetail 스킬 탭에서 토글 제어, 기본값 전체 OFF
+- [x] SKILLS.json으로 프로젝트별 활성 스킬 관리
+- [x] GET/PATCH /projects/{id}/skills/{skill_id} API 추가
+- [x] 글로벌 채팅에서 프로젝트 파일 노출 버그 수정 (레거시 글로벌 컬렉션 정리)
+
 ### v4.1 — 2026-04-28
 - [x] Knowledge 파일 핀 기능 — 핀된 파일은 RAG 없이 매 대화 system prompt에 직접 주입
-- [x] 프로젝트 컨텍스트 파일 자동 생성 (Sparkles 버튼) — 설명 입력 → Gemini가 CONTEXT.md / RULES.md / TODO.md 초안 생성 → 검토 후 저장+자동핀
 - [x] PATCH /knowledge/{filename} — archived/pinned 통합 처리
 
 ### v4.0 — 2026-04-28
