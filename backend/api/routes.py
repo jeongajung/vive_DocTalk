@@ -36,6 +36,9 @@ class KnowledgePatchRequest(BaseModel):
     archived: bool | None = None
     pinned: bool | None = None
 
+class SkillToggleRequest(BaseModel):
+    enabled: bool
+
 
 
 
@@ -173,6 +176,30 @@ async def delete_knowledge(project_id: str, filename: str):
     if not projects_manager.delete_knowledge_file(project_id, filename):
         raise HTTPException(status_code=404, detail="File not found")
     return {"status": "deleted"}
+
+
+# ── Project skills ────────────────────────────────────────
+
+@router.get("/projects/{project_id}/skills")
+async def list_project_skills(project_id: str):
+    if not projects_manager.get_project(project_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    all_skills = skills_manager.list_skills()
+    enabled = projects_manager.get_enabled_skills(project_id)
+    return {"skills": [
+        {**s, "enabled": s["id"] in enabled}
+        for s in all_skills
+    ]}
+
+
+@router.patch("/projects/{project_id}/skills/{skill_id}")
+async def toggle_project_skill(project_id: str, skill_id: str, body: SkillToggleRequest):
+    if not projects_manager.get_project(project_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    if not skills_manager.get_skill(skill_id):
+        raise HTTPException(status_code=404, detail="Skill not found")
+    projects_manager.set_skill_enabled(project_id, skill_id, body.enabled)
+    return {"skill_id": skill_id, "enabled": body.enabled}
 
 
 

@@ -29,6 +29,9 @@ def _archive_dir(pid: str) -> str:
 def _meta_path(pid: str) -> str:
     return os.path.join(PROJECTS_DIR, pid, "KNOWLEDGE_META.json")
 
+def _skills_path(pid: str) -> str:
+    return os.path.join(PROJECTS_DIR, pid, "SKILLS.json")
+
 
 # ── Markdown serialization ────────────────────────────────
 
@@ -138,6 +141,24 @@ def get_pinned_contents(pid: str) -> list[tuple[str, str]]:
             except Exception:
                 pass
     return result
+
+def get_enabled_skills(pid: str) -> list[str]:
+    path = _skills_path(pid)
+    if not os.path.exists(path):
+        return []
+    with open(path, encoding="utf-8") as f:
+        return json.load(f).get("enabled_skills", [])
+
+def set_skill_enabled(pid: str, skill_id: str, enabled: bool):
+    path = _skills_path(pid)
+    data = {"enabled_skills": get_enabled_skills(pid)}
+    if enabled and skill_id not in data["enabled_skills"]:
+        data["enabled_skills"].append(skill_id)
+    elif not enabled and skill_id in data["enabled_skills"]:
+        data["enabled_skills"].remove(skill_id)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
 
 def list_knowledge(pid: str) -> list[dict]:
     kdir = _knowledge_dir(pid)

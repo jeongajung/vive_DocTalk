@@ -33,6 +33,13 @@ interface KnowledgeFile {
   pinned: boolean;
 }
 
+interface ProjectSkill {
+  id: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+}
+
 interface Props {
   project: Project;
   onBack: () => void;
@@ -69,7 +76,8 @@ const FILE_COLORS: Record<string, string> = {
 export function ProjectDetail({ project, onBack, onOpenChat, onNewChat, onProjectUpdated }: Props) {
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [knowledge, setKnowledge] = useState<KnowledgeFile[]>([]);
-  const [activeTab, setActiveTab] = useState<"chats" | "activity">("chats");
+  const [projectSkills, setProjectSkills] = useState<ProjectSkill[]>([]);
+  const [activeTab, setActiveTab] = useState<"chats" | "activity" | "skills">("chats");
   const [input, setInput] = useState("");
   const [uploading, setUploading] = useState(false);
   const [editingInstructions, setEditingInstructions] = useState(false);
@@ -86,6 +94,9 @@ export function ProjectDetail({ project, onBack, onOpenChat, onNewChat, onProjec
     fetch(`/api/projects/${project.id}/knowledge`)
       .then((r) => r.json())
       .then((d) => setKnowledge(d.files ?? []));
+    fetch(`/api/projects/${project.id}/skills`)
+      .then((r) => r.json())
+      .then((d) => setProjectSkills(d.skills ?? []));
   };
 
   useEffect(() => {
@@ -165,6 +176,17 @@ export function ProjectDetail({ project, onBack, onOpenChat, onNewChat, onProjec
   const activeFiles = knowledge.filter((f) => !f.archived);
   const archivedFiles = knowledge.filter((f) => f.archived);
 
+  const toggleSkill = async (skillId: string, enabled: boolean) => {
+    await fetch(`/api/projects/${project.id}/skills/${skillId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    });
+    setProjectSkills((prev) =>
+      prev.map((s) => (s.id === skillId ? { ...s, enabled } : s))
+    );
+  };
+
   return (
     <div style={{ minHeight: "100%", background: "#141414", overflowY: "auto" }}>
       <div style={{ maxWidth: 760, margin: "0 auto", padding: "32px 24px 80px" }}>
@@ -238,13 +260,13 @@ export function ProjectDetail({ project, onBack, onOpenChat, onNewChat, onProjec
 
         {/* ── Tabs ── */}
         <div style={{ display: "flex", gap: 0, borderBottom: "1px solid #2a2a2a", marginBottom: 24 }}>
-          {(["chats", "activity"] as const).map((tab) => (
+          {(["chats", "activity", "skills"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               style={{ background: "none", border: "none", borderBottom: activeTab === tab ? "2px solid #e2e8f0" : "2px solid transparent", color: activeTab === tab ? "#e2e8f0" : "#6b7280", padding: "8px 16px", cursor: "pointer", fontSize: "0.88rem", fontWeight: 500, marginBottom: -1 }}
             >
-              {tab === "chats" ? "내 대화" : "활동"}
+              {tab === "chats" ? "내 대화" : tab === "activity" ? "활동" : "스킬"}
             </button>
           ))}
           <div style={{ flex: 1 }} />
@@ -279,7 +301,47 @@ export function ProjectDetail({ project, onBack, onOpenChat, onNewChat, onProjec
           </div>
         )}
 
-        {/* ── Instructions (지침) ── */}
+        {/* ── Skills tab ── */}
+        {activeTab === "skills" && (
+          <div style={{ marginBottom: 40 }}>
+            {projectSkills.length === 0 ? (
+              <p style={{ color: "#4b5563", fontSize: "0.85rem", textAlign: "center", padding: "32px 0" }}>
+                등록된 스킬이 없습니다. 스킬 설정에서 스킬을 먼저 추가하세요.
+              </p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {projectSkills.map((skill) => (
+                  <div
+                    key={skill.id}
+                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderRadius: 10, background: "#1a1a1a", border: "1px solid #2a2a2a" }}
+                  >
+                    <div style={{ flex: 1 }}>
+                      <p style={{ margin: 0, fontSize: "0.88rem", color: skill.enabled ? "#e2e8f0" : "#4b5563", fontWeight: 500 }}>{skill.name}</p>
+                      <p style={{ margin: "3px 0 0", fontSize: "0.75rem", color: "#4b5563" }}>{skill.description}</p>
+                    </div>
+                    <button
+                      onClick={() => toggleSkill(skill.id, !skill.enabled)}
+                      style={{
+                        width: 40, height: 22, borderRadius: 11, border: "none", cursor: "pointer",
+                        background: skill.enabled ? "#3b82f6" : "#2a2a2a",
+                        position: "relative", flexShrink: 0, transition: "background 0.2s",
+                      }}
+                    >
+                      <span style={{
+                        position: "absolute", top: 3, width: 16, height: 16, borderRadius: "50%",
+                        background: "#fff", transition: "left 0.2s",
+                        left: skill.enabled ? 21 : 3,
+                      }} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Instructions & Knowledge (지침/파일) — 스킬 탭 제외 ── */}
+        {activeTab !== "skills" && (<>
         <Section
           title="지침"
           action={
@@ -451,6 +513,7 @@ export function ProjectDetail({ project, onBack, onOpenChat, onNewChat, onProjec
             </div>
           )}
         </Section>
+        </>)}
 
       </div>
     </div>

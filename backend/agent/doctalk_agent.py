@@ -15,16 +15,21 @@ MODEL = "gemini-3-flash-preview"
 
 from agent.multi_agent import _next_key as _get_next_key
 
-ROUTER_PROMPT = """당신은 사용자의 질문을 분석하여 가장 적합한 스킬을 선택합니다.
+ROUTER_PROMPT = """당신은 사용자의 질문을 분석하여 스킬이 필요한지 판단합니다.
 
 사용 가능한 스킬 목록:
 {skill_list}
 
 사용자 질문: {question}
 
-위 스킬 중 가장 적합한 스킬의 id만 JSON으로 반환하세요.
-예시: {{"skill_id": "doc_search"}}
-반드시 위 id 중 하나를 선택해야 합니다."""
+판단 기준:
+- 업로드된 문서 검색/참조가 필요한 질문 → 적합한 스킬 선택
+- 특정 작업(PPT 제작, 문서 작성 등) 요청 → 적합한 스킬 선택
+- 일반적인 질문/대화 (지식, 개념, 잡담 등) → null 반환
+
+JSON으로만 반환하세요.
+스킬 필요: {{"skill_id": "doc_search"}}
+스킬 불필요: {{"skill_id": null}}"""
 
 HISTORY_PREFIX = """[이전 대화 이력]
 {history}
@@ -37,11 +42,9 @@ class DocTalkAgent:
     def __init__(self):
         self.vectorstore = _vectorstore
 
-    def _route_skill(self, question: str, skills: list[dict]) -> dict:
+    def _route_skill(self, question: str, skills: list[dict]) -> dict | None:
         if not skills:
-            return {"id": "fallback", "name": "기본", "system_prompt": "당신은 문서 검색 AI입니다. 한국어로 답변하세요."}
-        if len(skills) == 1:
-            return skills[0]
+            return None
 
         skill_list = "\n".join(
             f'- id: {s["id"]}, name: {s["name"]}, description: {s["description"]}'
@@ -55,9 +58,11 @@ class DocTalkAgent:
         try:
             text = response.text.strip().replace("```json", "").replace("```", "").strip()
             skill_id = json.loads(text).get("skill_id")
-            return next((s for s in skills if s["id"] == skill_id), skills[0])
+            if not skill_id:
+                return None
+            return next((s for s in skills if s["id"] == skill_id), None)
         except Exception:
-            return skills[0]
+            return None
 
     def _build_history_context(self, session_id: str, project_id: str | None, limit: int = 5) -> str:
         conv = conversation_store.get_conversation(session_id, project_id)
@@ -77,10 +82,34 @@ class DocTalkAgent:
         session_id: str,
         project_id: str | None = None,
     ) -> dict:
-        skills = skills_manager.list_skills()
+        all_skills = skills_manager.list_skills()
+        if project_id:
+            enabled = projects_manager.get_enabled_skills(project_id)
+            skills = [s for s in all_skills if s["id"] in enabled]
+        else:
+            skills = all_skills
         selected_skill = self._route_skill(question, skills)
 
-        # 프로젝트 지침 + 핀된 컨텍스트 파일을 시스템 프롬프트에 병합
+        # 스킬 없으면 일반 LLM 답변
+        if selected_skill is None:
+            system_prompt = "당신은 친절한 AI 어시스턴트입니다. 한국어로 답변하세요."
+            if project_id:
+                project = projects_manager.get_project(project_id)
+                if project and project.get("instructions"):
+                    system_prompt = f"{project['instructions']}\n\n{system_prompt}"
+
+            history = self._build_history_context(session_id, project_id)
+            full_question = (
+                HISTORY_PREFIX.format(history=history) + question if history else question
+            )
+            genai.configure(api_key=_get_next_key())
+            model = genai.GenerativeModel(model_name=MODEL, system_instruction=system_prompt)
+            response = model.generate_content(full_question)
+            answer_text = response.text
+            conversation_store.add_message(session_id, question, answer_text, None, project_id)
+            return self._build_a2ui_response(answer_text, [], None)
+
+        # 스킬 있으면 RAG 처리
         system_prompt = selected_skill["system_prompt"]
         if project_id:
             project = projects_manager.get_project(project_id)
@@ -126,17 +155,17 @@ class DocTalkAgent:
         ] if chunks else []
         return self._build_a2ui_response(answer_text, sources, selected_skill)
 
-    def _build_a2ui_response(self, answer: str, sources: list[dict], skill: dict) -> dict:
+    def _build_a2ui_response(self, answer: str, sources: list[dict], skill: dict | None) -> dict:
         source_chips = [
             {"id": f"source_{i}", "component": {"Chip": {"label": f"{s['filename']} (관련도 {s['score']})"}}}
             for i, s in enumerate(sources)
         ]
-        components = [
-            {"id": "skill_badge", "component": {"Chip": {"label": f"스킬: {skill['name']}"}}},
-            {"id": "answer_card", "component": {"Card": {"children": [
-                {"id": "answer_text", "component": {"Text": {"text": answer}}}
-            ]}}},
-        ]
+        components = []
+        if skill:
+            components.append({"id": "skill_badge", "component": {"Chip": {"label": f"스킬: {skill['name']}"}}})
+        components.append({"id": "answer_card", "component": {"Card": {"children": [
+            {"id": "answer_text", "component": {"Text": {"text": answer}}}
+        ]}}})
         if source_chips:
             components.append({
                 "id": "sources_section",
